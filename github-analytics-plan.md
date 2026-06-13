@@ -100,7 +100,7 @@ naming inside the medallion folders; don't fight the convention.
 ## 5. Repo layout
 
 ```
-github-analytics/
+oss_pulse/
 ├── pyproject.toml / uv.lock           # uv-managed
 ├── .python-version                    # 3.12
 ├── README.md                          # architecture, lineage, screenshots, run guide
@@ -291,8 +291,12 @@ extract_github → dbt_snapshot → dbt_build (run + test) → export_parquet
 
 ## 11. CI — GitHub Actions
 
-On PR: set up uv + Python 3.12 → install dbt venv → run `pytest` (ingestion) + `ruff` + `mypy` →
-`dbt build` against a small **committed fixture DuckDB / seeds** (so CI needs no API access).
+**Current (`ci.yml`):** two jobs run on every PR and push to `master` — `lint-workflows`
+(pinned, checksum-verified `actionlint`) and `python` (uv + `ruff` + `mypy` + `pytest`).
+The `python` job no-ops cleanly until the package is scaffolded.
+
+**Planned (phase 8):** add a `dbt` job that installs the dbt venv and runs `dbt build` against a
+small committed fixture DuckDB / seeds, so CI needs no GitHub API access.
 
 ---
 
