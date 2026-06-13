@@ -1,0 +1,48 @@
+{
+  "entities": [
+    {
+      "name": "repo",
+      "table_name": "bronze.repos",
+      "endpoint": "/repos/{owner}/{name}",
+      "key_field": "id",
+      "single_object": true,
+      "supports_since": false,
+      "since_field": null,
+      "paginate": false,
+      "discriminator": "default"
+    },
+    {
+      "name": "issue",
+      "table_name": "bronze.issues",
+      "endpoint": "/repos/{owner}/{name}/issues",
+      "key_field": "id",
+      "single_object": false,
+      "supports_since": true,
+      "since_field": "updated_at",
+      "paginate": true,
+      "discriminator": "issue_or_pr"
+    },
+    {
+      "name": "commit",
+      "table_name": "bronze.commits",
+      "endpoint": "/repos/{owner}/{name}/commits",
+      "key_field": "sha",
+      "single_object": false,
+      "supports_since": true,
+      "since_field": "commit.committer.date",
+      "paginate": true,
+      "discriminator": "default"
+    },
+    {
+      "name": "contributor",
+      "table_name": "bronze.contributors",
+      "endpoint": "/repos/{owner}/{name}/contributors",
+      "key_field": "id",
+      "single_object": false,
+      "supports_since": false,
+      "since_field": null,
+      "paginate": true,
+      "discriminator": "default"
+    }
+  ]
+}

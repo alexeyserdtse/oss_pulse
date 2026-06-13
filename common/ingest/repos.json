@@ -1,0 +1,7 @@
+{
+  "repos": [
+    "duckdb/duckdb",
+    "pola-rs/polars",
+    "dbt-labs/dbt-core"
+  ]
+}

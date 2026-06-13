@@ -1,0 +1,11 @@
+{
+  "sha": "abc123def456abc123def456abc123def456abc1",
+  "commit": {
+    "author": {"name": "Alice", "email": "alice@example.com", "date": "2024-01-10T08:00:00Z"},
+    "committer": {"name": "Alice", "email": "alice@example.com", "date": "2024-01-10T08:00:00Z"},
+    "message": "Fix window function bug"
+  },
+  "author": {"id": 5001, "login": "alice", "type": "User"},
+  "committer": {"id": 5001, "login": "alice", "type": "User"},
+  "parents": [{"sha": "aaa000bbb111ccc222ddd333eee444fff555aaa0"}]
+}
