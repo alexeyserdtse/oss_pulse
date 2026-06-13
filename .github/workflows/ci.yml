@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Lint workflow files
+        run: |
+          curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.10/actionlint_1.7.10_linux_amd64.tar.gz -o /tmp/al.tar.gz
+          echo "f4c76b71db5755a713e6055cbb0857ed07e103e028bda117817660ebadb4386f  /tmp/al.tar.gz" | sha256sum -c -
+          tar xzf /tmp/al.tar.gz -C /tmp actionlint
+          /tmp/actionlint
+
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Detect Python code
+        id: detect
+        run: |
+          if find . -name '*.py' -not -path './.git/*' | grep -q . || [ -f pyproject.toml ] || [ -f requirements.txt ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No Python code yet - skipping lint/test"
+          fi
+
+      - name: Set up uv
+        if: steps.detect.outputs.present == 'true'
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python and dependencies
+        if: steps.detect.outputs.present == 'true'
+        run: uv sync --all-extras
+
+      - name: Lint
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Type-check
+        if: steps.detect.outputs.present == 'true'
+        run: uv run mypy .
+
+      - name: Test
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          if compgen -G "tests/*.py" > /dev/null || compgen -G "test_*.py" > /dev/null; then
+            uv run pytest -q
+          else
+            echo "no tests yet"
+          fi
