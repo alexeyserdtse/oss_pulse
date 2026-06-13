@@ -296,7 +296,9 @@ extract_github → dbt_snapshot → dbt_build (run + test) → export_parquet
 The `python` job no-ops cleanly until the package is scaffolded.
 
 **Planned (phase 8):** add a `dbt` job that installs the dbt venv and runs `dbt build` against a
-small committed fixture DuckDB / seeds, so CI needs no GitHub API access.
+small committed fixture DuckDB / seeds, so CI needs no GitHub API access. Add a `docker` job that
+builds the image and runs a smoke test, so "works in a container" is verified continuously rather
+than at release time.
 
 ---
 
@@ -310,8 +312,21 @@ small committed fixture DuckDB / seeds, so CI needs no GitHub API access.
 5. **Tests / seeds / macros / snapshot** — generic + singular tests, macro, custom generic test,
    `snap_repo_stars`.
 6. **Orchestration** — Airflow standalone + Cosmos DAG; confirm full daily run end-to-end.
+   Introduce **Docker here**: Airflow is the one component painful to run locally (pip
+   `standalone`, two venvs to dodge the dbt conflict), and the official Airflow images/compose are
+   well-trodden — containerizing at this phase removes the biggest local-setup headache.
 7. **Visualization** — Evidence project reading gold parquet; 2–3 pages.
-8. **Docs & CI & README** — lineage screenshot, GitHub Actions, polished README.
+8. **Docs & CI & README** — lineage screenshot, GitHub Actions, polished README. Add a
+   `Dockerfile` (+ compose) as the deliverable/demo layer so a reviewer can `docker compose up`,
+   and a CI `docker` job that builds + smoke-tests the image.
+
+### Containerization strategy
+
+Develop locally with uv (fast iteration); **stay portable throughout** — env-driven config, no
+hardcoded absolute paths, pinned Python — so containerizing is cheap, not a big-bang final step.
+uv (reproducible venvs) + DuckDB (embedded single file) already cover most of Docker's isolation
+benefit, so Docker's role here is the **demo/release artifact and the Airflow runtime**, not daily
+dev. Bring it in at phase 6, verify it in CI at phase 8.
 
 ---
 
