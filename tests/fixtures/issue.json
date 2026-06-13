@@ -1,0 +1,15 @@
+{
+  "id": 2100001,
+  "number": 1001,
+  "title": "Bug: incorrect result in window function",
+  "state": "open",
+  "user": {"id": 5001, "login": "alice", "type": "User"},
+  "labels": [{"id": 1, "name": "bug", "color": "d73a4a"}],
+  "assignees": [],
+  "created_at": "2024-01-10T08:00:00Z",
+  "updated_at": "2024-01-11T09:00:00Z",
+  "closed_at": null,
+  "body": "Reproducer: SELECT ...",
+  "comments": 3,
+  "pull_request": null
+}

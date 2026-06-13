@@ -1,0 +1,21 @@
+{
+  "id": 2100002,
+  "number": 1002,
+  "title": "Fix window function edge case",
+  "state": "open",
+  "user": {"id": 5002, "login": "bob", "type": "User"},
+  "labels": [],
+  "assignees": [],
+  "created_at": "2024-01-12T08:00:00Z",
+  "updated_at": "2024-01-12T10:00:00Z",
+  "closed_at": null,
+  "body": "Fixes #1001",
+  "comments": 1,
+  "pull_request": {
+    "url": "https://api.github.com/repos/duckdb/duckdb/pulls/1002",
+    "html_url": "https://github.com/duckdb/duckdb/pull/1002",
+    "diff_url": "https://github.com/duckdb/duckdb/pull/1002.diff",
+    "patch_url": "https://github.com/duckdb/duckdb/pull/1002.patch",
+    "merged_at": null
+  }
+}

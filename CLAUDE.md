@@ -4,10 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**Planning-complete, not yet scaffolded** — only CI/CD, the design document, and licensing exist.
-`github-analytics-plan.md` is the authoritative spec (stack decisions, repo layout, OOP ingestion
-design, dbt structure, gold marts, build phases). Read it before building any feature; this file
-is the operational summary.
+**Phase 2 complete — ingestion package built and tested.** The `github_ingest/` package, a 54-test
+suite, and the CI `python` job are all live. `github-analytics-plan.md` is the authoritative spec;
+this file is the operational summary.
+
+Done: uv scaffold, `github_ingest/` (config, models, client, extractors, warehouse, pipeline,
+CLI), 54 tests (real in-memory DuckDB; HTTP mocked at the boundary), CI running ruff + mypy + pytest.
+
+Not yet built: dbt layer (bronze→silver→gold), Airflow DAG, Evidence dashboards.
+
+Thesis: **stars measure hype, not health.** The project ranks a cohort of competing OSS data tools
+by *dependency-risk* signals — bus factor, issue/PR responsiveness, liveness, contributor momentum —
+to show which are safe to build on, and where health disagrees with popularity. Scope is the
+maintainer/contributor side the GitHub API exposes: it measures project health, not adoption.
 
 Goal: ingest OSS data-tooling repos from the GitHub REST API into a medallion DuckDB warehouse,
 model with dbt, orchestrate with Airflow + Cosmos, visualize with Evidence.dev — all local, mostly
@@ -16,8 +25,7 @@ without Docker.
 ## Toolchain & commands
 
 Python is managed with **uv**, pinned to **3.12** (dbt/Airflow don't yet support the system's
-3.14). The commands below are exactly what CI runs (`.github/workflows/ci.yml`); they no-op until
-the package is scaffolded, then activate automatically.
+3.14). The commands below are exactly what CI runs (`.github/workflows/ci.yml`).
 
 ```bash
 uv sync --all-extras          # install project + dev deps from uv.lock
@@ -42,11 +50,50 @@ dbt docs generate   # lineage graph (captured for README)
   Three layers only; anything between silver and gold is a dbt **intermediate** model, never a
   new layer.
 
-- **Ingestion is an Anti-Corruption Layer.** `github_ingest/` validates external GitHub JSON into
-  typed Pydantic models *at the boundary* so upstream schema drift fails fast instead of
-  corrupting silver. `BaseExtractor(ABC)` + per-entity subclasses; all DuckDB-specific SQL is
-  isolated in `warehouse.py` (swap-friendly). The token is read from env via `SecretStr` and
-  never logged or committed.
+- **Bronze is fixed-schema, append-only raw JSON.** Every bronze table has the same six columns:
+  `load_id`, `record_id`, `entity`, `source_repo`, `ingested_at`, `payload` (raw JSON verbatim).
+  A separate `bronze.ingestion_state` table (keyed by `endpoint + params_hash`) stores ETag /
+  Last-Modified / `since` values for conditional HTTP requests. `record_id` uses the natural key
+  (repo id / issue id / commit sha / user id) or a deterministic `nokey:<hash>` fallback.
+
+- **Config-as-data: tunable config lives in `common/*.json`; logic lives in classes.** `common/settings.json`
+  holds non-secret scalars (`github_base_url`, `page_size`, `request_timeout`, `max_retries`,
+  `duckdb_path`, `log_level`). `common/ingest/repos.json` is the ingestion source of truth for which
+  repos to ingest. `common/ingest/entities.json` holds declarative `EntitySpec` records (`name`,
+  `table_name`, `endpoint`, `key_field`, `single_object`, `supports_since`, `since_field`, `paginate`,
+  `discriminator`). Pydantic validates all three files on load (`EntitySpec` model +
+  `load_entities`/`load_repos` in `github_ingest/common.py`). **Secret boundary:** `github_token` is
+  `SecretStr`, sourced from `ENV`/`.env` only — it has no JSON source and never appears in `common/`.
+  A guardrail test enforces this.
+
+- **Pydantic is the silver staging contract, not the bronze DDL.** `models.py` validates raw
+  payloads non-blocking — raw is always persisted; validation failures are counted and logged, not
+  rejected. Pydantic catches GitHub schema drift before it can silently corrupt silver transforms.
+  The `issue_or_pr` discriminator strategy in `EntitySpec` assigns `entity = "pull_request"` when
+  `pull_request` key is present, so issues and PRs share `bronze.issues` with a discriminator
+  column. Entities built: `Repo`, `Issue` (+ PR discriminator), `Commit`, `Contributor`. Stargazer
+  and a dedicated PR-detail extractor are deferred.
+
+- **Single config-driven `Extractor(spec, client)` — no per-entity subclasses.** `Extractor` reads
+  `EntitySpec` to resolve `endpoint()`, `record_id()` (via `spec.key_field`), `discriminator()`,
+  and `validate()`. Two genuine logic branches remain in code: single-object fetch (`spec.single_object`)
+  and the `issue_or_pr` discriminator. The `since` param is only sent to endpoints where
+  `spec.supports_since=true`. All DuckDB-specific SQL is isolated in `warehouse.py` (swap-friendly).
+
+- **Incremental ingestion via conditional requests + max-seen watermark.** The CLI accepts
+  `--mode {daily,history}` (default `daily`). Daily mode threads ETag/Last-Modified headers and a
+  `since` param through both single-object and paginated paths; a 304 response yields no rows and
+  skips the write. The `since` watermark stored in `bronze.ingestion_state` is derived from the MAX
+  value of each record's `since_field` (e.g. `updated_at` for issues, `commit.committer.date` for
+  commits) — never from wall-clock time. History mode ignores stored state on read (full backfill)
+  but remains append-only. Both modes are safe to re-run.
+
+- **Structured JSON logging throughout.** `__main__.py` wires a zero-dependency JSON formatter
+  (`_JsonFormatter`) to the root logger; all other modules use `logging.getLogger(__name__)` with
+  `extra=` context (e.g. `load_id`, `repo`, `entity`, `mode`, `endpoint`). Key events: request
+  DEBUG, 304-skip INFO, bronze-write INFO (table + row count), validation-drift/missing-key/rate-limit
+  WARNING, run-summary INFO, infra ERROR. Tokens and payloads are never logged. Log level is set
+  by `settings.json` `log_level` (default `"INFO"`), overridden at runtime by `--log-level`.
 
 - **DuckDB is single-writer → the DAG is sequential.** `extract_github → dbt_snapshot →
   dbt_build → export_parquet`. There is never a concurrent writer. The final step exports gold
@@ -69,8 +116,8 @@ dbt docs generate   # lineage graph (captured for README)
   approvals). Admins are not enforced, so the owner *can* direct-push (logged as a bypass) — but
   the normal path is **branch → PR → green checks → merge → delete branch**.
 - **`ci.yml`** has `lint-workflows` (pinned, checksum-verified `actionlint`) and the `python` job
-  above. **`dependabot.yml`** opens weekly grouped PRs for github-actions and pip; they go through
-  the same gate.
+  above (ruff + mypy + pytest — all currently running and green). **`dependabot.yml`** opens weekly
+  grouped PRs for github-actions and pip; they go through the same gate.
 - **No release/deploy pipeline** — this is a data project, not a published artifact.
 - Phase 8 will add a `dbt` CI job running `dbt build` against a committed fixture DuckDB so CI
   needs no GitHub API access.

@@ -216,3 +216,19 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+# Project env / venvs
+.env
+.venv*/
+
+# dbt artifacts
+target/
+dbt_packages/
+logs/
+
+# node
+node_modules/
